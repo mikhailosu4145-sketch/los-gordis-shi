@@ -122,11 +122,11 @@ local function irAComprarMunicion()
     task.wait(0.3)
 end
 
--- VALIDACIÓN DE ATM ACTIVO Y CON VIDA
-local function atmEstaActivo(atm)
-    if not atm or not atm.Parent then return false end
+-- VALIDACIÓN DE OBJETOS ACTIVOS CON HUMANOID (ATM / CAJA)
+local function objetivoEstaActivo(target)
+    if not target or not target.Parent then return false end
     
-    local humanoid = atm:FindFirstChildOfClass("Humanoid")
+    local humanoid = target:FindFirstChildOfClass("Humanoid")
     if humanoid and humanoid.Health <= 0 then
         return false
     end
@@ -134,33 +134,29 @@ local function atmEstaActivo(atm)
     return true
 end
 
--- OBTENER PARTE OBJETIVO DEL ATM
-local function obtenerParteObjetivo(atm)
-    if not atmEstaActivo(atm) then return nil end
-    return atm:FindFirstChild("Pantalla") 
-        or atm:FindFirstChild("Part") 
-        or atm:FindFirstChildWhichIsA("BasePart")
+-- OBTENER PARTE OBJETIVO DE ATM O CAJA REGISTRADORA
+local function obtenerParteObjetivo(target)
+    if not objetivoEstaActivo(target) then return nil end
+    return target:FindFirstChild("MainScreen")
+        or target:FindFirstChild("Pantalla") 
+        or target:FindFirstChild("Register")
+        or target:FindFirstChild("Part") 
+        or target:FindFirstChildWhichIsA("BasePart")
 end
 
--- CÁLCULO MEJORADO DE POSICIÓN FRONTAL AL ATM
-local function posicionarFrenteATM(atm, targetPart, rootPart)
+-- CÁLCULO MEJORADO DE POSICIÓN FRONTAL AL ATM / CAJA
+local function posicionarFrenteObjetivo(target, targetPart, rootPart)
     local cfTarget = targetPart.CFrame
     
-    -- Si el eje principal está girado 90 grados (nos deja al costado),
-    -- probamos usar RightVector o probamos el CFrame del PrimaryPart del modelo
-    if atm:IsA("Model") and atm.PrimaryPart then
-        cfTarget = atm.PrimaryPart.CFrame
+    if target:IsA("Model") and target.PrimaryPart then
+        cfTarget = target.PrimaryPart.CFrame
     end
 
-    -- Usamos el vector de frente principal
-    local pos1 = cfTarget.Position + (cfTarget.LookVector * 3.5)
-    local pos2 = cfTarget.Position + (cfTarget.RightVector * 3.5)
-    
-    -- Si el LookVector nos deja de lado, cambiamos al RightVector
-    -- Para asegurar la cara que da a la pantalla, usamos LookVector negativo si aplica
     local offsetFrente = cfTarget.LookVector
     if targetPart.Name == "Pantalla" then
-        offsetFrente = -cfTarget.RightVector -- Ajuste habitual para pantallas de ATM giradas
+        offsetFrente = -cfTarget.RightVector
+    elseif targetPart.Name == "MainScreen" then
+        offsetFrente = cfTarget.LookVector
     end
 
     local posFinal = cfTarget.Position + (offsetFrente * 3.5)
@@ -212,6 +208,54 @@ local function recargarArma()
     end)
 end
 
+-- ATAQUE A UN OBJETIVO (ATM O CAJA REGISTRADORA)
+local function atacarObjetivo(target, rootPart)
+    local targetPart = obtenerParteObjetivo(target)
+    if not targetPart then return false end
+
+    aplicarWallbang(targetPart)
+
+    posicionarFrenteObjetivo(target, targetPart, rootPart)
+    camera.CFrame = CFrame.lookAt(camera.CFrame.Position, targetPart.Position)
+
+    task.wait(1.2)
+
+    equiparArma()
+    rootPart.Anchored = true
+    
+    camera.CFrame = CFrame.lookAt(camera.CFrame.Position, targetPart.Position)
+
+    -- Disparo 1
+    hacerClic()
+    task.wait(0.35)
+
+    -- Disparo 2
+    camera.CFrame = CFrame.lookAt(camera.CFrame.Position, targetPart.Position)
+    hacerClic()
+    task.wait(0.25)
+
+    -- Recarga
+    camera.CFrame = CFrame.lookAt(camera.CFrame.Position, targetPart.Position)
+    recargarArma()
+
+    task.wait(0.25)
+    rootPart.Anchored = false
+
+    task.wait(1.5)
+    return true
+end
+
+-- BÚSQUEDA DE CAJAS REGISTRADORAS ACTIVAS EN WORKSPACE
+local function obtenerCajasRegistradorasActivas()
+    local listaCajas = {}
+    for _, obj in ipairs(workspace:GetChildren()) do
+        if obj.Name == "Cash Register" and objetivoEstaActivo(obj) then
+            table.insert(listaCajas, obj)
+        end
+    end
+    return listaCajas
+end
+
 -- BUCLE PRINCIPAL DE FARM
 local function mainFarmLoop()
     iniciarRecoleccionAutomatica()
@@ -230,64 +274,37 @@ local function mainFarmLoop()
         end
 
         local miniMap = workspace:FindFirstChild("miniMap")
-        if not miniMap then
-            task.wait(1)
-            continue
-        end
 
+        -- 1. BÚSQUEDA Y FILTRADO DE ATMS ACTIVOS
         local atmList = {}
-        for _, obj in ipairs(miniMap:GetChildren()) do
-            if obj.Name:lower():find("atm") and atmEstaActivo(obj) then
-                table.insert(atmList, obj)
+        if miniMap then
+            for _, obj in ipairs(miniMap:GetChildren()) do
+                if obj.Name:lower():find("atm") and objetivoEstaActivo(obj) then
+                    table.insert(atmList, obj)
+                end
             end
         end
 
-        if #atmList == 0 then
-            task.wait(1.5)
-            continue
-        end
+        -- 2. PRIORIDAD 1: SI HAY ATMS DISPONIBLES, FARMER ATMS
+        if #atmList > 0 then
+            for _, atm in ipairs(atmList) do
+                if not running then break end
+                if verificarMunicionAgotada() then irAComprarMunicion() end
 
-        for _, atm in ipairs(atmList) do
-            if not running then break end
-
-            if verificarMunicionAgotada() then
-                irAComprarMunicion()
+                atacarObjetivo(atm, rootPart)
             end
-
-            local targetPart = obtenerParteObjetivo(atm)
-
-            if targetPart then
-                aplicarWallbang(targetPart)
-
-                -- Teletransporte corregido
-                posicionarFrenteATM(atm, targetPart, rootPart)
-                camera.CFrame = CFrame.lookAt(camera.CFrame.Position, targetPart.Position)
-
-                task.wait(1.2)
-
-                equiparArma()
-                rootPart.Anchored = true
-                
-                camera.CFrame = CFrame.lookAt(camera.CFrame.Position, targetPart.Position)
-
-                -- Disparo 1
-                hacerClic()
-                task.wait(0.35)
-
-                -- Disparo 2
-                camera.CFrame = CFrame.lookAt(camera.CFrame.Position, targetPart.Position)
-                hacerClic()
-                task.wait(0.25)
-
-                -- Recarga
-                camera.CFrame = CFrame.lookAt(camera.CFrame.Position, targetPart.Position)
-                recargarArma()
-
-                task.wait(0.25)
-                rootPart.Anchored = false
-
-                -- Pausa entre ATMs
-                task.wait(1.5)
+        else
+            -- 3. PRIORIDAD 2: SI NO HAY ATMS, FARMEAR CAJAS REGISTRADORAS
+            local cajasActivas = obtenerCajasRegistradorasActivas()
+            if #cajasActivas > 0 then
+                -- Ataca una caja y vuelve al inicio del ciclo para reevaluar si ya reapareció algún ATM
+                if running then
+                    if verificarMunicionAgotada() then irAComprarMunicion() end
+                    atacarObjetivo(cajasActivas[1], rootPart)
+                end
+            else
+                -- Si no hay ni ATMs ni cajas activas, espera brevemente
+                task.wait(1)
             end
         end
         
