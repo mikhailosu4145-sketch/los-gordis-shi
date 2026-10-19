@@ -161,10 +161,7 @@ local function posicionarFrenteObjetivo(target, targetPart, rootPart)
         offsetFrente = -cfTarget.RightVector
     end
 
-    -- Nos posicionamos a 2.5 studs de distancia y aseguramos el CFrame mirando directamente a targetPart.Position
-    local posFinal = cfTarget.Position + (offsetFrente * 2.5)
-    
-    -- Apuntamos el RootPart hacia la posición EXACTA de la caja (incluyendo altura Y)
+    local posFinal = cfTarget.Position + (offsetFrente * 2.2) + Vector3.new(0, 0.5, 0)
     rootPart.CFrame = CFrame.lookAt(posFinal, targetPart.Position)
 end
 
@@ -211,11 +208,18 @@ local function recargarArma()
     end)
 end
 
--- APUNTADO DIRECTO DE CÁMARA AL OBJETIVO
+-- APUNTADO DIRECTO DE CÁMARA AL OBJETIVO (CON CORRECCIÓN DE ALTURA)
 local function enfocarCamaraAObjetivo(targetPart)
     if not targetPart then return end
-    -- Se orienta la cámara desde su posición hacia el centro exacto de la parte (caja o pantalla de ATM)
-    camera.CFrame = CFrame.lookAt(camera.CFrame.Position, targetPart.Position)
+    
+    local targetPos = targetPart.Position
+    
+    -- Ajuste fino vertical para cajas registradoras
+    if targetPart.Name == "MainScreen" or targetPart.Name == "Register" or (targetPart.Parent and targetPart.Parent.Name == "Cash Register") then
+        targetPos = targetPos - Vector3.new(0, 0.8, 0)
+    end
+
+    camera.CFrame = CFrame.lookAt(camera.CFrame.Position, targetPos)
 end
 
 -- ATAQUE A UN OBJETIVO (ATM O CAJA REGISTRADORA)
