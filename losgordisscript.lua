@@ -164,7 +164,7 @@ local function obtenerParteObjetivo(target)
         or target:FindFirstChildWhichIsA("BasePart")
 end
 
--- CÁLCULO MEJORADO DE POSICIÓN FRONTAL (ESTÁNDAR)
+-- CÁLCULO MEJORADO DE POSICIÓN FRONTAL
 local function posicionarFrenteObjetivo(target, targetPart, rootPart)
     local cfTarget = targetPart.CFrame
     
@@ -277,7 +277,7 @@ local function atacarObjetivo(target, rootPart)
     return true
 end
 
--- BÚSQUEDA DE CAJAS REGISTRADORAS ACTIVAS
+-- BÚSQUEDA DE TODAS LAS CAJAS REGISTRADORAS ACTIVAS (EXCLUYENDO LA LISTA NEGRA)
 local function obtenerCajasRegistradorasActivas()
     local listaCajas = {}
     for _, obj in ipairs(workspace:GetChildren()) do
@@ -326,12 +326,25 @@ local function mainFarmLoop()
                 atacarObjetivo(atm, rootPart)
             end
         else
-            -- 3. PRIORIDAD 2: CAJAS REGISTRADORAS
+            -- 3. PRIORIDAD 2: CAJAS REGISTRADORAS (RECORRE TODAS LAS CAJAS VÁLIDAS EN LUGAR DE SOLO UNA)
             local cajasActivas = obtenerCajasRegistradorasActivas()
             if #cajasActivas > 0 then
-                if running then
+                for _, caja in ipairs(cajasActivas) do
+                    if not running then break end
+                    -- Si durante las cajas reaparece algún ATM, rompe el ciclo para volver a priorizar ATMs
+                    local hayATM = false
+                    if miniMap then
+                        for _, obj in ipairs(miniMap:GetChildren()) do
+                            if obj.Name:lower():find("atm") and objetivoEstaActivo(obj) then
+                                hayATM = true
+                                break
+                            end
+                        end
+                    end
+                    if hayATM then break end
+
                     if verificarMunicionAgotada() then irAComprarMunicion() end
-                    atacarObjetivo(cajasActivas[1], rootPart)
+                    atacarObjetivo(caja, rootPart)
                 end
             else
                 task.wait(1)
