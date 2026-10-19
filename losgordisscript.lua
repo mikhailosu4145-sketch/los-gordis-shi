@@ -288,7 +288,21 @@ local function obtenerCajasRegistradorasActivas()
     return listaCajas
 end
 
--- BUCLE PRINCIPAL DE FARM
+-- BÚSQUEDA DE ATMS ACTIVOS EN EL MINIMAP
+local function obtenerATMsActivos()
+    local atmList = {}
+    local miniMap = workspace:FindFirstChild("miniMap")
+    if miniMap then
+        for _, obj in ipairs(miniMap:GetChildren()) do
+            if obj.Name:lower():find("atm") and objetivoEstaActivo(obj) then
+                table.insert(atmList, obj)
+            end
+        end
+    end
+    return atmList
+end
+
+-- BUCLE PRINCIPAL DE FARM CON ESPERA DINÁMICA
 local function mainFarmLoop()
     iniciarRecoleccionAutomatica()
 
@@ -305,19 +319,9 @@ local function mainFarmLoop()
             continue
         end
 
-        local miniMap = workspace:FindFirstChild("miniMap")
+        local atmList = obtenerATMsActivos()
 
-        -- 1. BUSCAR ATMS ACTIVOS EN MINIMAP
-        local atmList = {}
-        if miniMap then
-            for _, obj in ipairs(miniMap:GetChildren()) do
-                if obj.Name:lower():find("atm") and objetivoEstaActivo(obj) then
-                    table.insert(atmList, obj)
-                end
-            end
-        end
-
-        -- 2. PRIORIDAD 1: ATMS
+        -- PRIORIDAD 1: ATMS
         if #atmList > 0 then
             for _, atm in ipairs(atmList) do
                 if not running then break end
@@ -326,32 +330,28 @@ local function mainFarmLoop()
                 atacarObjetivo(atm, rootPart)
             end
         else
-            -- 3. PRIORIDAD 2: CAJAS REGISTRADORAS (DESDE CONTENEDORES Y RAÍZ, EXCEPTO LA CAJA PROBLEMÁTICA)
+            -- PRIORIDAD 2: CAJAS REGISTRADORAS
             local cajasActivas = obtenerCajasRegistradorasActivas()
             if #cajasActivas > 0 then
                 for _, caja in ipairs(cajasActivas) do
                     if not running then break end
                     
-                    local hayATM = false
-                    if miniMap then
-                        for _, obj in ipairs(miniMap:GetChildren()) do
-                            if obj.Name:lower():find("atm") and objetivoEstaActivo(obj) then
-                                hayATM = true
-                                break
-                            end
-                        end
-                    end
-                    if hayATM then break end
+                    -- Si durante la ronda de cajas reaparece algún ATM, vuelve de inmediato a ATMs
+                    if #obtenerATMsActivos() > 0 then break end
 
                     if verificarMunicionAgotada() then irAComprarMunicion() end
                     atacarObjetivo(caja, rootPart)
                 end
             else
-                task.wait(1)
+                -- PRIORIDAD 3: BUCLE DE ESPERA DINÁMICO (CUANDO TODO ESTÁ EN COOLDOWN)
+                -- Mantiene la recolección de dinero activa y consulta continuamente la reaparición de objetivos
+                while running and #obtenerATMsActivos() == 0 and #obtenerCajasRegistradorasActivas() == 0 do
+                    task.wait(0.5)
+                end
             end
         end
         
-        task.wait(0.5)
+        task.wait(0.2)
     end
     
     detenerRecoleccionAutomatica()
