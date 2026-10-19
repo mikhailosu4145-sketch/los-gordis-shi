@@ -138,13 +138,13 @@ end
 local function obtenerParteObjetivo(target)
     if not objetivoEstaActivo(target) then return nil end
     return target:FindFirstChild("MainScreen")
-        or target:FindFirstChild("Pantalla") 
         or target:FindFirstChild("Register")
+        or target:FindFirstChild("Pantalla") 
         or target:FindFirstChild("Part") 
         or target:FindFirstChildWhichIsA("BasePart")
 end
 
--- CÁLCULO MEJORADO DE POSICIÓN FRONTAL AL ATM / CAJA
+-- CÁLCULO MEJORADO DE POSICIÓN Y APUNTADO HACIA ABAJO
 local function posicionarFrenteObjetivo(target, targetPart, rootPart)
     local cfTarget = targetPart.CFrame
     
@@ -154,17 +154,18 @@ local function posicionarFrenteObjetivo(target, targetPart, rootPart)
 
     local offsetFrente = cfTarget.LookVector
 
-    -- Si es una Cash Register, invertimos la dirección para posicionar de frente a la pantalla
+    -- Inversión de orientación si es una caja registradora
     if target.Name == "Cash Register" or (target.Parent and target.Parent.Name == "Cash Register") then
         offsetFrente = -cfTarget.LookVector
     elseif targetPart.Name == "Pantalla" then
         offsetFrente = -cfTarget.RightVector
     end
 
-    local posFinal = cfTarget.Position + (offsetFrente * 3.0)
-    local targetLook = Vector3.new(targetPart.Position.X, rootPart.Position.Y, targetPart.Position.Z)
-
-    rootPart.CFrame = CFrame.lookAt(posFinal, targetLook)
+    -- Nos posicionamos a 2.5 studs de distancia y aseguramos el CFrame mirando directamente a targetPart.Position
+    local posFinal = cfTarget.Position + (offsetFrente * 2.5)
+    
+    -- Apuntamos el RootPart hacia la posición EXACTA de la caja (incluyendo altura Y)
+    rootPart.CFrame = CFrame.lookAt(posFinal, targetPart.Position)
 end
 
 -- WALLBANG / DESACTIVAR COLISIÓN
@@ -210,6 +211,13 @@ local function recargarArma()
     end)
 end
 
+-- APUNTADO DIRECTO DE CÁMARA AL OBJETIVO
+local function enfocarCamaraAObjetivo(targetPart)
+    if not targetPart then return end
+    -- Se orienta la cámara desde su posición hacia el centro exacto de la parte (caja o pantalla de ATM)
+    camera.CFrame = CFrame.lookAt(camera.CFrame.Position, targetPart.Position)
+end
+
 -- ATAQUE A UN OBJETIVO (ATM O CAJA REGISTRADORA)
 local function atacarObjetivo(target, rootPart)
     local targetPart = obtenerParteObjetivo(target)
@@ -218,26 +226,26 @@ local function atacarObjetivo(target, rootPart)
     aplicarWallbang(targetPart)
 
     posicionarFrenteObjetivo(target, targetPart, rootPart)
-    camera.CFrame = CFrame.lookAt(camera.CFrame.Position, targetPart.Position)
+    enfocarCamaraAObjetivo(targetPart)
 
     task.wait(1.2)
 
     equiparArma()
     rootPart.Anchored = true
     
-    camera.CFrame = CFrame.lookAt(camera.CFrame.Position, targetPart.Position)
+    enfocarCamaraAObjetivo(targetPart)
 
     -- Disparo 1
     hacerClic()
     task.wait(0.35)
 
     -- Disparo 2
-    camera.CFrame = CFrame.lookAt(camera.CFrame.Position, targetPart.Position)
+    enfocarCamaraAObjetivo(targetPart)
     hacerClic()
     task.wait(0.25)
 
     -- Recarga
-    camera.CFrame = CFrame.lookAt(camera.CFrame.Position, targetPart.Position)
+    enfocarCamaraAObjetivo(targetPart)
     recargarArma()
 
     task.wait(0.25)
