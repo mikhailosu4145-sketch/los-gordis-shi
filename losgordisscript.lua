@@ -12,7 +12,7 @@ local tiempoCompraMantener = 0.6
 local running = false
 local autoCollectConnection = nil
 
--- LISTA DE CAJAS REGISTRADORAS A IGNORAR
+-- LISTA NEGRA: CAJA ESPECÍFICA A IGNORAR
 local cajasIgnoradas = {
     Vector3.new(-535.06, 166.66, -362.82),
 }
@@ -277,11 +277,11 @@ local function atacarObjetivo(target, rootPart)
     return true
 end
 
--- BÚSQUEDA DE TODAS LAS CAJAS REGISTRADORAS ACTIVAS (EXCLUYENDO LA LISTA NEGRA)
+-- BÚSQUEDA PROFUNDA DE TODAS LAS CAJAS REGISTRADORAS VÁLIDAS
 local function obtenerCajasRegistradorasActivas()
     local listaCajas = {}
-    for _, obj in ipairs(workspace:GetChildren()) do
-        if obj.Name == "Cash Register" and objetivoEstaActivo(obj) then
+    for _, obj in ipairs(workspace:GetDescendants()) do
+        if obj.Name == "Cash Register" and obj:IsA("Model") and objetivoEstaActivo(obj) then
             table.insert(listaCajas, obj)
         end
     end
@@ -326,12 +326,12 @@ local function mainFarmLoop()
                 atacarObjetivo(atm, rootPart)
             end
         else
-            -- 3. PRIORIDAD 2: CAJAS REGISTRADORAS (RECORRE TODAS LAS CAJAS VÁLIDAS EN LUGAR DE SOLO UNA)
+            -- 3. PRIORIDAD 2: CAJAS REGISTRADORAS (DESDE CONTENEDORES Y RAÍZ, EXCEPTO LA CAJA PROBLEMÁTICA)
             local cajasActivas = obtenerCajasRegistradorasActivas()
             if #cajasActivas > 0 then
                 for _, caja in ipairs(cajasActivas) do
                     if not running then break end
-                    -- Si durante las cajas reaparece algún ATM, rompe el ciclo para volver a priorizar ATMs
+                    
                     local hayATM = false
                     if miniMap then
                         for _, obj in ipairs(miniMap:GetChildren()) do
