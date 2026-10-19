@@ -153,19 +153,21 @@ local function posicionarFrenteObjetivo(target, targetPart, rootPart)
     end
 
     local offsetFrente = cfTarget.LookVector
-    if targetPart.Name == "Pantalla" then
+
+    -- Si es una Cash Register, invertimos la dirección para posicionar de frente a la pantalla
+    if target.Name == "Cash Register" or (target.Parent and target.Parent.Name == "Cash Register") then
+        offsetFrente = -cfTarget.LookVector
+    elseif targetPart.Name == "Pantalla" then
         offsetFrente = -cfTarget.RightVector
-    elseif targetPart.Name == "MainScreen" then
-        offsetFrente = cfTarget.LookVector
     end
 
-    local posFinal = cfTarget.Position + (offsetFrente * 3.5)
+    local posFinal = cfTarget.Position + (offsetFrente * 3.0)
     local targetLook = Vector3.new(targetPart.Position.X, rootPart.Position.Y, targetPart.Position.Z)
 
     rootPart.CFrame = CFrame.lookAt(posFinal, targetLook)
 end
 
--- WALLBANG
+-- WALLBANG / DESACTIVAR COLISIÓN
 local function aplicarWallbang(targetPart)
     if targetPart and targetPart:IsA("BasePart") then
         pcall(function()
@@ -285,7 +287,7 @@ local function mainFarmLoop()
             end
         end
 
-        -- 2. PRIORIDAD 1: SI HAY ATMS DISPONIBLES, FARMER ATMS
+        -- 2. PRIORIDAD 1: SI HAY ATMS DISPONIBLES, FARMEAR ATMS
         if #atmList > 0 then
             for _, atm in ipairs(atmList) do
                 if not running then break end
@@ -297,13 +299,11 @@ local function mainFarmLoop()
             -- 3. PRIORIDAD 2: SI NO HAY ATMS, FARMEAR CAJAS REGISTRADORAS
             local cajasActivas = obtenerCajasRegistradorasActivas()
             if #cajasActivas > 0 then
-                -- Ataca una caja y vuelve al inicio del ciclo para reevaluar si ya reapareció algún ATM
                 if running then
                     if verificarMunicionAgotada() then irAComprarMunicion() end
                     atacarObjetivo(cajasActivas[1], rootPart)
                 end
             else
-                -- Si no hay ni ATMs ni cajas activas, espera brevemente
                 task.wait(1)
             end
         end
