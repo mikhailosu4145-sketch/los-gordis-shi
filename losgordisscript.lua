@@ -12,6 +12,11 @@ local tiempoCompraMantener = 0.6
 local running = false
 local autoCollectConnection = nil
 
+-- LISTA DE CAJAS REGISTRADORAS A IGNORAR
+local cajasIgnoradas = {
+    Vector3.new(-535.06, 166.66, -362.82),
+}
+
 -- INTERFAZ GRÁFICA
 local screenGui = Instance.new("ScreenGui")
 screenGui.Name = "AtmFarmGui"
@@ -28,7 +33,7 @@ toggleButton.Font = Enum.Font.SourceSansBold
 toggleButton.Text = "START"
 toggleButton.Parent = screenGui
 
--- RECOLECCIÓN EN SEGUNDO PLANO
+-- RECOLECCIÓN EN SEGUNDO PLANO DE DINERO TIRADO
 local function iniciarRecoleccionAutomatica()
     if autoCollectConnection then return end
     autoCollectConnection = RunService.Heartbeat:Connect(function()
@@ -69,7 +74,7 @@ local function verificarMunicionAgotada()
     return obtenerCantidadMunicion() <= 0
 end
 
--- BÚSQUEDA DEL OBJETO DE LA TIENDA
+-- BÚSQUEDA DEL OBJETO DE LA TIENDA DE MUNICIÓN
 local function obtenerObjetoMunicionTienda()
     local tienda = workspace:FindFirstChild("TiendaArmas")
     if not tienda then return nil end
@@ -122,10 +127,25 @@ local function irAComprarMunicion()
     task.wait(0.3)
 end
 
+-- VALIDACIÓN DE CAJA EN LISTA NEGRA
+local function esCajaIgnorada(caja)
+    local posCaja = caja:IsA("Model") and caja:GetPivot().Position or caja.Position
+    for _, posIgnorada in ipairs(cajasIgnoradas) do
+        if (posCaja - posIgnorada).Magnitude < 4 then
+            return true
+        end
+    end
+    return false
+end
+
 -- VALIDACIÓN DE OBJETOS ACTIVOS CON HUMANOID (ATM / CAJA)
 local function objetivoEstaActivo(target)
     if not target or not target.Parent then return false end
     
+    if target.Name == "Cash Register" and esCajaIgnorada(target) then
+        return false
+    end
+
     local humanoid = target:FindFirstChildOfClass("Humanoid")
     if humanoid and humanoid.Health <= 0 then
         return false
@@ -144,7 +164,7 @@ local function obtenerParteObjetivo(target)
         or target:FindFirstChildWhichIsA("BasePart")
 end
 
--- CÁLCULO MEJORADO DE POSICIÓN Y APUNTADO HACIA ABAJO
+-- CÁLCULO MEJORADO DE POSICIÓN FRONTAL (ESTÁNDAR)
 local function posicionarFrenteObjetivo(target, targetPart, rootPart)
     local cfTarget = targetPart.CFrame
     
@@ -154,14 +174,13 @@ local function posicionarFrenteObjetivo(target, targetPart, rootPart)
 
     local offsetFrente = cfTarget.LookVector
 
-    -- Inversión de orientación si es una caja registradora
     if target.Name == "Cash Register" or (target.Parent and target.Parent.Name == "Cash Register") then
         offsetFrente = -cfTarget.LookVector
     elseif targetPart.Name == "Pantalla" then
         offsetFrente = -cfTarget.RightVector
     end
 
-    local posFinal = cfTarget.Position + (offsetFrente * 2.2) + Vector3.new(0, 0.5, 0)
+    local posFinal = cfTarget.Position + (offsetFrente * 2.5) + Vector3.new(0, 0.5, 0)
     rootPart.CFrame = CFrame.lookAt(posFinal, targetPart.Position)
 end
 
@@ -208,13 +227,12 @@ local function recargarArma()
     end)
 end
 
--- APUNTADO DIRECTO DE CÁMARA AL OBJETIVO (CON CORRECCIÓN DE ALTURA)
+-- APUNTADO DE CÁMARA NORMAL DE CAJAS
 local function enfocarCamaraAObjetivo(targetPart)
     if not targetPart then return end
     
     local targetPos = targetPart.Position
     
-    -- Ajuste fino vertical para cajas registradoras
     if targetPart.Name == "MainScreen" or targetPart.Name == "Register" or (targetPart.Parent and targetPart.Parent.Name == "Cash Register") then
         targetPos = targetPos - Vector3.new(0, 0.8, 0)
     end
@@ -259,7 +277,7 @@ local function atacarObjetivo(target, rootPart)
     return true
 end
 
--- BÚSQUEDA DE CAJAS REGISTRADORAS ACTIVAS EN WORKSPACE
+-- BÚSQUEDA DE CAJAS REGISTRADORAS ACTIVAS
 local function obtenerCajasRegistradorasActivas()
     local listaCajas = {}
     for _, obj in ipairs(workspace:GetChildren()) do
@@ -289,7 +307,7 @@ local function mainFarmLoop()
 
         local miniMap = workspace:FindFirstChild("miniMap")
 
-        -- 1. BÚSQUEDA Y FILTRADO DE ATMS ACTIVOS
+        -- 1. BUSCAR ATMS ACTIVOS EN MINIMAP
         local atmList = {}
         if miniMap then
             for _, obj in ipairs(miniMap:GetChildren()) do
@@ -299,7 +317,7 @@ local function mainFarmLoop()
             end
         end
 
-        -- 2. PRIORIDAD 1: SI HAY ATMS DISPONIBLES, FARMEAR ATMS
+        -- 2. PRIORIDAD 1: ATMS
         if #atmList > 0 then
             for _, atm in ipairs(atmList) do
                 if not running then break end
@@ -308,7 +326,7 @@ local function mainFarmLoop()
                 atacarObjetivo(atm, rootPart)
             end
         else
-            -- 3. PRIORIDAD 2: SI NO HAY ATMS, FARMEAR CAJAS REGISTRADORAS
+            -- 3. PRIORIDAD 2: CAJAS REGISTRADORAS
             local cajasActivas = obtenerCajasRegistradorasActivas()
             if #cajasActivas > 0 then
                 if running then
